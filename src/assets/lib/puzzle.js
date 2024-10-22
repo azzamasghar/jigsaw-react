@@ -332,7 +332,7 @@ class Puzzle {
       }
     } else {
       if (this.selected.isClose()) {
-        this.selected.snap();
+        this.selected.snap(this.pieces);
       }
     }
 
@@ -532,13 +532,13 @@ class Puzzle {
   }
 
   arrangePiecesInScroller() {
-    /* const size = Math.min(this.pieces[0][0].width, this.pieces[0][0].height);
-    const neck = 0.1 * size;
-    this.piecePaddingInScrollbar = neck * 2 + PIECE_PADDING_IN_SCROLLBAR; */
-
     let x = this.piecePaddingInScrollbar;
-    const pieceDistance = this.piecePaddingInScrollbar;
+
+    const size = Math.min(this.pieces[0][0].width, this.pieces[0][0].height);
+    const neck = 0.1 * size;
+    const pieceDistance = neck * 2 + this.piecePaddingInScrollbar;
     const padding = this.piecePaddingInScrollbar;
+
     const scrollAreaHeight = this.pieces[0][0].height;
     const y = this.canvas.height - (scrollAreaHeight + padding);
 
@@ -562,10 +562,21 @@ class Puzzle {
       }
     }
 
-    // Total width of all the pieces in the scrollbar
-    const totalPiecesWidth = visiblePieces.flat().reduce((acc, piece) => {
+    /* visiblePieces.forEach((piece) => {
+      piece.setPosition(x - this.scrollOffset, y);
+      const size = Math.min(piece.width, piece.height);
+      const neck = 0.1 * size;
+      x += piece.width + 2 * neck + pieceDistance; // Add space between pieces, including necks
+    }); */
+
+    const totalPiecesWidth = visiblePieces.reduce((acc, piece) => {
       return acc + piece.width + pieceDistance;
     }, 0);
+
+    // Total width of all the pieces in the scrollbar
+    /*  const totalPiecesWidth = visiblePieces.flat().reduce((acc, piece) => {
+      return acc + piece.width + pieceDistance;
+    }, 0); */
 
     // Clear the scrollbar area before rearranging
     this.ctx.clearRect(0, y, this.canvas.width, scrollAreaHeight + padding * 2);
@@ -576,17 +587,22 @@ class Puzzle {
     }
 
     // Ensure the scroll offset does not go beyond the total width of the pieces
-    if (this.scrollOffset > totalPiecesWidth - this.canvas.width + padding) {
+    if (this.scrollOffset > totalPiecesWidth - this.canvas.width + (neck * 2 + padding)) {
       this.scrollOffset = Math.max(
-        totalPiecesWidth - this.canvas.width + padding,
+        totalPiecesWidth - this.canvas.width + (neck * 2 + padding),
         0
       );
     }
 
     visiblePieces.forEach((piece) => {
       piece.setPosition(x - this.scrollOffset, y);
-      x += piece.width + pieceDistance; // Add space between pieces
+      x += piece.width + pieceDistance; // Add space between pieces, including necks
     });
+
+    /* visiblePieces.forEach((piece) => {
+      piece.setPosition(x - this.scrollOffset, y);
+      x += piece.width + pieceDistance; // Add space between pieces
+    }); */
 
     // Ensure the wheel event listener is added only once
     if (!this.wheelEventListenerAdded) {
@@ -854,6 +870,9 @@ class Puzzle {
 }
 
 class Piece {
+  static animationQueue = [];
+  static isAnimating = false;
+
   constructor(obj) {
     this.x = obj.x;
     this.xCorrect = obj.x;
@@ -870,10 +889,12 @@ class Piece {
     this.height = obj.height;
     this.ctx = obj.ctx;
     this.inPuzzle = false;
+    this.snapped = false;
+
+    this.animationInProgress = false;
   }
 
-  draw(ctx) {
-    ctx.fillStyle = "#000";
+  buildPath(ctx) {
     ctx.beginPath();
 
     const size = Math.min(this.width, this.height);
@@ -881,13 +902,8 @@ class Piece {
     const tabWidth = 0.2 * size;
     const tabHeight = 0.2 * size;
 
-    if (this.isClose() && !this.snapped && this.hintsEnabled === true) {
-      this.ctx.strokeStyle = "rgb(0,255,0)";
-    } else if (!this.snapped) {
-      this.ctx.strokeStyle = "#000";
-    } else {
-      this.ctx.strokeStyle = "rgba(1,1,1,0)";
-    }
+    // Move to the initial point
+    ctx.moveTo(this.x, this.y);
 
     // from top left
     ctx.moveTo(this.x, this.y);
@@ -1009,6 +1025,26 @@ class Piece {
     }
     ctx.lineTo(this.x, this.y);
 
+    ctx.closePath();
+  }
+
+  draw(ctx) {
+    ctx.fillStyle = "#000";
+    this.buildPath(ctx);
+
+    const size = Math.min(this.width, this.height);
+    const tabHeight = 0.2 * size;
+
+    ctx.lineWidth = 2;
+
+    if (this.isClose() && !this.snapped && this.hintsEnabled === true) {
+      this.ctx.strokeStyle = "rgb(0,255,0)";
+    } else if (!this.snapped) {
+      this.ctx.strokeStyle = "#000";
+    } else {
+      this.ctx.strokeStyle = "rgba(1,1,1,0)";
+    }
+
     ctx.save();
     ctx.clip();
 
@@ -1031,11 +1067,6 @@ class Piece {
 
     ctx.restore();
     ctx.stroke();
-
-    if (this.isAnimating) {
-      this.drawSnapWave(ctx);
-    }
-
     this.ctx.strokeStyle = "#000";
   }
 
@@ -1061,7 +1092,161 @@ class Piece {
     this.x = this.xCorrect;
     this.y = this.yCorrect;
     this.snapped = true;
+
+    const connectedPieces = this.getConnectedPieces(pieces);
+
+    // Trigger the animation for the entire group only once
+    this.animateWhiteOverlay([this, ...connectedPieces]);
+    console.log(connectedPieces);
   }
+
+  getConnectedPieces(allPieces) {
+    const connectedPieces = [];
+    const epsilon = 0.01; // Tolerance for floating-point comparisons
+
+    // Loop through all pieces
+    for (const pieceList of allPieces) {
+      for (const otherPiece of pieceList) {
+        if (otherPiece === this) continue; // Skip self
+        if (!otherPiece.snapped) continue; // Only consider snapped pieces
+
+        // Check for adjacency
+        const isRightNeighbor =
+          Math.abs(otherPiece.x - (this.x + this.width)) < epsilon &&
+          Math.abs(otherPiece.y - this.y) < epsilon;
+
+        const isLeftNeighbor =
+          Math.abs(otherPiece.x - (this.x - otherPiece.width)) < epsilon &&
+          Math.abs(otherPiece.y - this.y) < epsilon;
+
+        const isTopNeighbor =
+          Math.abs(otherPiece.x - this.x) < epsilon &&
+          Math.abs(otherPiece.y - (this.y - otherPiece.height)) < epsilon;
+
+        const isBottomNeighbor =
+          Math.abs(otherPiece.x - this.x) < epsilon &&
+          Math.abs(otherPiece.y - (this.y + this.height)) < epsilon;
+
+        if (
+          isRightNeighbor ||
+          isLeftNeighbor ||
+          isTopNeighbor ||
+          isBottomNeighbor
+        ) {
+          connectedPieces.push(otherPiece);
+        }
+      }
+    }
+
+    return connectedPieces;
+  }
+
+  animateWhiteOverlay(pieces) {
+    const totalFrames = 30;
+    let currentFrame = 0;
+    const maxAlpha = 0.4;
+
+    this.animationInProgress = true;
+
+    const drawOverlayFrame = () => {
+      pieces.forEach((piece) => {
+        // Draw the overlay effect using the piece's path
+        this.ctx.save();
+
+        // Build the piece's path
+        piece.buildPath(this.ctx);
+
+        // Set the overlay style
+        this.ctx.globalAlpha = maxAlpha * (1 - currentFrame / totalFrames);
+        this.ctx.fillStyle = "rgba(255, 255, 255, 1)";
+
+        // Fill the path with the overlay color
+        this.ctx.fill();
+
+        this.ctx.restore();
+      });
+
+      currentFrame++;
+
+      if (currentFrame <= totalFrames) {
+        requestAnimationFrame(drawOverlayFrame);
+      } else {
+        this.animationInProgress = false;
+      }
+    };
+
+    drawOverlayFrame();
+  }
+
+  /* animateWhiteOverlay(pieces) {
+    const totalFrames = 30; // Total animation frames
+    let currentFrame = 0; // Current frame count
+    const maxAlpha = 0.4; // Max opacity for the overlay
+
+    this.animationInProgress = true;
+
+    const drawOverlayFrame = () => {
+      pieces.forEach((piece) => {
+        // Draw the piece itself
+        piece.draw(this.ctx);
+
+        // Draw the overlay effect
+        this.ctx.save();
+        this.ctx.globalAlpha = maxAlpha * (1 - currentFrame / totalFrames); // Fading effect
+        this.ctx.fillStyle = "rgba(255, 255, 255, 1)"; // White overlay
+        this.ctx.fillRect(piece.x, piece.y, piece.width, piece.height); // Draw overlay on piece
+        this.ctx.restore();
+      });
+
+      currentFrame++;
+
+      // Continue the animation until all frames are completed
+      if (currentFrame <= totalFrames) {
+        requestAnimationFrame(drawOverlayFrame);
+      } else {
+        this.animationInProgress = false; // Reset animation flag
+      }
+    };
+
+    // Start the animation
+    drawOverlayFrame();
+  } */
+
+  /* // Animate a white transparent overlay when the piece is snapped
+  animateWhiteOverlay() {
+    const ctx = this.ctx;
+    const totalFrames = 30; // Total frames for the animation
+    let currentFrame = 0; // Current frame
+    const maxAlpha = 0.4; // Maximum opacity for the overlay
+
+    this.animationInProgress = true;
+
+    const drawOverlayFrame = () => {
+      // Draw the piece itself
+      this.draw(ctx);
+
+      // Draw the overlay effect
+      ctx.save();
+      ctx.globalAlpha = maxAlpha * (1 - currentFrame / totalFrames); // Fading effect
+      ctx.fillStyle = "rgba(255, 255, 255, 1)"; // White color
+
+      // Draw the overlay rectangle on top of the piece
+      ctx.fillRect(this.x, this.y, this.width, this.height);
+      ctx.restore();
+
+      currentFrame++;
+
+      // Continue the animation until the total frames are reached
+      if (currentFrame <= totalFrames) {
+        requestAnimationFrame(drawOverlayFrame);
+      } else {
+        this.animationInProgress = false; // Reset animation flag
+      }
+    };
+
+    // Start the overlay animation
+    drawOverlayFrame();
+  } */
 
   distance(a, b) {
     return Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2));
