@@ -290,16 +290,14 @@ class Puzzle {
 
       // If piece is moved out of the scrollbar area (above 80px from the bottom)
       if (this.pieceScroller) {
-        requestAnimationFrame(() => {
-          const scrollAreaHeight = this.pieces[0][0].height;
-          if (
-            mouseY <
-            this.canvas.height - scrollAreaHeight - this.piecePaddingInScrollbar
-          ) {
-            this.selected.inPuzzle = true; // Piece is now in the puzzle area
-            this.arrangePiecesInScroller(); // Rearrange the remaining pieces in the scrollbar
-          }
-        });
+        const scrollAreaHeight = this.pieces[0][0].height;
+        if (
+          mouseY <
+          this.canvas.height - scrollAreaHeight - this.piecePaddingInScrollbar
+        ) {
+          this.selected.inPuzzle = true; // Piece is now in the puzzle area
+          this.arrangePiecesInScroller(); // Rearrange the remaining pieces in the scrollbar
+        }
       }
     }
 
@@ -587,7 +585,10 @@ class Puzzle {
     }
 
     // Ensure the scroll offset does not go beyond the total width of the pieces
-    if (this.scrollOffset > totalPiecesWidth - this.canvas.width + (neck * 2 + padding)) {
+    if (
+      this.scrollOffset >
+      totalPiecesWidth - this.canvas.width + (neck * 2 + padding)
+    ) {
       this.scrollOffset = Math.max(
         totalPiecesWidth - this.canvas.width + (neck * 2 + padding),
         0
@@ -1093,14 +1094,16 @@ class Piece {
     this.y = this.yCorrect;
     this.snapped = true;
 
-    const connectedPieces = this.getConnectedPieces(pieces);
-
-    // Trigger the animation for the entire group only once
-    this.animateWhiteOverlay([this, ...connectedPieces]);
-    console.log(connectedPieces);
+    if (pieces) {
+      const connectedPieces = this.getConnectedPieces(pieces);
+      this.animateWhiteOverlay([this, ...connectedPieces]);
+    }
   }
 
   getConnectedPieces(allPieces) {
+    if (!allPieces) {
+      return;
+    }
     const connectedPieces = [];
     const epsilon = 0.01; // Tolerance for floating-point comparisons
 
@@ -1177,76 +1180,6 @@ class Piece {
 
     drawOverlayFrame();
   }
-
-  /* animateWhiteOverlay(pieces) {
-    const totalFrames = 30; // Total animation frames
-    let currentFrame = 0; // Current frame count
-    const maxAlpha = 0.4; // Max opacity for the overlay
-
-    this.animationInProgress = true;
-
-    const drawOverlayFrame = () => {
-      pieces.forEach((piece) => {
-        // Draw the piece itself
-        piece.draw(this.ctx);
-
-        // Draw the overlay effect
-        this.ctx.save();
-        this.ctx.globalAlpha = maxAlpha * (1 - currentFrame / totalFrames); // Fading effect
-        this.ctx.fillStyle = "rgba(255, 255, 255, 1)"; // White overlay
-        this.ctx.fillRect(piece.x, piece.y, piece.width, piece.height); // Draw overlay on piece
-        this.ctx.restore();
-      });
-
-      currentFrame++;
-
-      // Continue the animation until all frames are completed
-      if (currentFrame <= totalFrames) {
-        requestAnimationFrame(drawOverlayFrame);
-      } else {
-        this.animationInProgress = false; // Reset animation flag
-      }
-    };
-
-    // Start the animation
-    drawOverlayFrame();
-  } */
-
-  /* // Animate a white transparent overlay when the piece is snapped
-  animateWhiteOverlay() {
-    const ctx = this.ctx;
-    const totalFrames = 30; // Total frames for the animation
-    let currentFrame = 0; // Current frame
-    const maxAlpha = 0.4; // Maximum opacity for the overlay
-
-    this.animationInProgress = true;
-
-    const drawOverlayFrame = () => {
-      // Draw the piece itself
-      this.draw(ctx);
-
-      // Draw the overlay effect
-      ctx.save();
-      ctx.globalAlpha = maxAlpha * (1 - currentFrame / totalFrames); // Fading effect
-      ctx.fillStyle = "rgba(255, 255, 255, 1)"; // White color
-
-      // Draw the overlay rectangle on top of the piece
-      ctx.fillRect(this.x, this.y, this.width, this.height);
-      ctx.restore();
-
-      currentFrame++;
-
-      // Continue the animation until the total frames are reached
-      if (currentFrame <= totalFrames) {
-        requestAnimationFrame(drawOverlayFrame);
-      } else {
-        this.animationInProgress = false; // Reset animation flag
-      }
-    };
-
-    // Start the overlay animation
-    drawOverlayFrame();
-  } */
 
   distance(a, b) {
     return Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2));
