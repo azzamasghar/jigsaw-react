@@ -1,4 +1,4 @@
-canvas{
+canvas {
   display: block;
   width: 100%;
 }
@@ -37,28 +37,7 @@ canvas{
   vertical-align: middle;
 }
 .btn-icon:hover,
-.btn-icon.active{
+.btn-icon.active {
   background-color: #d0d0d0;
 }
 
-/* .controls .btn-solve,
-.controls .btn-mix,
-.controls .btn-edge-pieces,
-.controls .btn-all-pieces,
-.controls .btn-entire-image,
-.controls .btn-img-on-canvas,
-.controls .btn-toggle-hints {
-  width: 75px;
-  height: 30px;
-  margin-right: 10px;
-  font-family: 'Poppins', sans-serif;
-  background-color: green;
-  color: white;
-  font-weight: bold;
-  border-radius: 4px;
-  cursor: pointer;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  flex-shrink: 0;
-} */

@@ -33,7 +33,6 @@ const SCALE_MULTIPLIER = 2.0;
 
 class Puzzle {
   constructor(obj) {
-    console.log("construct");
     /** @type {HTMLCanvasElement} */
     this.canvas = obj.canvas;
     /** @type {Number} */
@@ -171,6 +170,12 @@ class Puzzle {
     }
 
     // add event listeners
+    // this.mouseWheelBoundMethod = this.handleMouseWheel.bind(this, totalPiecesWidth);
+    // this.mouseWheelBoundMethod = (e, totalPiecesWidth) => { this.handleMouseWheel(e, totalPiecesWidth) };
+    // this.mouseWheelBoundMethod = function (totalPiecesWidth) {
+    //   return this.handleMouseWheel(e);
+    // };
+
     this.canvas.addEventListener("mousedown", () => {
       this.mousedown(event);
     });
@@ -242,7 +247,6 @@ class Puzzle {
   }
 
   mousedown(e) {
-    console.log(e.type);
     e.stopPropagation();
     e.preventDefault();
 
@@ -521,6 +525,7 @@ class Puzzle {
   }
 
   mixPuzzle() {
+    this.solved = false;
     if (this.pieceScroller) {
       this.shufflePiecesInScroller();
       this.arrangePiecesInScroller();
@@ -560,21 +565,9 @@ class Puzzle {
       }
     }
 
-    /* visiblePieces.forEach((piece) => {
-      piece.setPosition(x - this.scrollOffset, y);
-      const size = Math.min(piece.width, piece.height);
-      const neck = 0.1 * size;
-      x += piece.width + 2 * neck + pieceDistance; // Add space between pieces, including necks
-    }); */
-
     const totalPiecesWidth = visiblePieces.reduce((acc, piece) => {
       return acc + piece.width + pieceDistance;
     }, 0);
-
-    // Total width of all the pieces in the scrollbar
-    /*  const totalPiecesWidth = visiblePieces.flat().reduce((acc, piece) => {
-      return acc + piece.width + pieceDistance;
-    }, 0); */
 
     // Clear the scrollbar area before rearranging
     this.ctx.clearRect(0, y, this.canvas.width, scrollAreaHeight + padding * 2);
@@ -600,16 +593,17 @@ class Puzzle {
       x += piece.width + pieceDistance; // Add space between pieces, including necks
     });
 
-    /* visiblePieces.forEach((piece) => {
-      piece.setPosition(x - this.scrollOffset, y);
-      x += piece.width + pieceDistance; // Add space between pieces
-    }); */
-
     // Ensure the wheel event listener is added only once
-    if (!this.wheelEventListenerAdded) {
+    if (!this.solved && !this.wheelEventListenerAdded) {
       // Handle horizontal scroll when the total width of pieces exceeds the canvas width
       if (totalPiecesWidth + padding > this.canvas.width) {
-        this.canvas.addEventListener("wheel", (e) => {
+        this.mouseWheelHandler = (e) => {
+          if (this.solved) {
+            this.canvas.removeEventListener("wheel", this.mouseWheelHandler);
+            this.wheelEventListenerAdded = false;
+            return;
+          }
+
           // Only handle horizontal scrolling
           if (e.deltaX !== 0) {
             // Update the scroll offset based on the mouse wheel delta
@@ -628,8 +622,9 @@ class Puzzle {
           }
 
           e.preventDefault(); // Prevent default page scrolling behavior
-        });
+        };
 
+        this.canvas.addEventListener("wheel", this.mouseWheelHandler);
         this.wheelEventListenerAdded = true; // Mark the listener as added
       }
     }
@@ -638,18 +633,6 @@ class Puzzle {
   }
 
   draw() {
-    // console.log('draw');
-    // update canvas width and height
-    /* if (this.fullScreen) {
-      this.canvas.width = window.innerWidth * this.scaleMultiplier;
-      this.canvas.height = window.innerHeight * this.scaleMultiplier;
-    } else {
-      this.canvas.width =
-        this.canvas.parentNode.offsetWidth * this.scaleMultiplier;
-      this.canvas.height =
-        this.canvas.parentNode.offsetHeight * this.scaleMultiplier;
-    } */
-
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
     if (this.pieceScroller) {
@@ -861,7 +844,6 @@ class Puzzle {
         piece.hintsEnabled = val;
       });
     });
-    console.log(this);
   }
 
   toggleImageOnCanvas(val) {
@@ -871,9 +853,6 @@ class Puzzle {
 }
 
 class Piece {
-  static animationQueue = [];
-  static isAnimating = false;
-
   constructor(obj) {
     this.x = obj.x;
     this.xCorrect = obj.x;
@@ -891,7 +870,6 @@ class Piece {
     this.ctx = obj.ctx;
     this.inPuzzle = false;
     this.snapped = false;
-
     this.animationInProgress = false;
   }
 
@@ -1043,7 +1021,9 @@ class Piece {
     } else if (!this.snapped) {
       this.ctx.strokeStyle = "#000";
     } else {
-      this.ctx.strokeStyle = "rgba(1,1,1,0)";
+      ctx.lineWidth = 1;
+      this.ctx.strokeStyle = "#000";
+      // this.ctx.strokeStyle = "rgba(1,1,1,0)";
     }
 
     ctx.save();
